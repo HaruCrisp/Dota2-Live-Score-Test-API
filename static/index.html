@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Esports Live (Free API)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      margin: 24px;
+    }
+
+    header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input {
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid #aaa;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 12px;
+    }
+
+    .score {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Esports Live (Free API)</h1>
+    <div class="controls">
+      <label>status:
+        <select id="status">
+          <option value="running" selected>running</option>
+          <option value="not_started">not_started</option>
+          <option value="finished">finished</option>
+        </select>
+      </label>
+      <label>videogame_slug: <input id="vg" placeholder="lol / valorant / cs2 / dota-2" /></label>
+      <button id="refresh">Refresh</button>
+      <span id="statusText" class="muted"></span>
+    </div>
+  </header>
+
+  <section class="grid" id="grid"></section>
+
+  <script>
+  const grid = document.getElementById('grid');
+  const statusText = document.getElementById('statusText');
+  document.getElementById('refresh').onclick = fetchData;
+
+  let timer;
+
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  function render(items, bannerText = null) {
+    grid.innerHTML = '';
+    if (!items || items.length === 0) {
+      grid.innerHTML = '<div class="muted">No matches to show.</div>';
+      return;
+    }
+    if (bannerText) {
+      const banner = document.createElement('div');
+      banner.className = 'muted';
+      banner.style.marginBottom = '8px';
+      banner.textContent = bannerText;
+      grid.appendChild(banner);
+    }
+    items.forEach(m => {
+      const scoreText = m.score || '—';
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="muted">${m.game} — ${m.league || ''} ${m.series ? '('+m.series+')' : ''}</div>
+        <div><strong>${m.team1 || 'TBD'}</strong> vs <strong>${m.team2 || 'TBD'}</strong></div>
+        <div class="score">${scoreText}</div>
+        <div class="muted">status: ${m.status || '—'}</div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  async function fetchData() {
+    statusText.textContent = 'Loading...';
+    try {
+      // 1) Try live
+      const live = await fetchJSON('/api/dota/live');
+      if (live.count > 0) {
+        statusText.textContent = `Updated ${new Date().toLocaleTimeString()} • ${live.count} live matches`;
+        render(live.items);
+        return;
+      }
+      // 2) Fallback to recent
+      const recent = await fetchJSON('/api/dota/recent');
+      statusText.textContent = `Updated ${new Date().toLocaleTimeString()} • 0 live — showing recent pro matches`;
+      render(recent.items.slice(0, 12), 'Recently finished pro matches:');
+    } catch (e) {
+      console.error(e);
+      statusText.textContent = 'Error loading';
+      grid.innerHTML = '<div class="muted">Could not load matches.</div>';
+    }
+  }
+
+  function start() {
+    fetchData();
+    clearInterval(timer);
+    // be kind to free API: 20–30s
+    timer = setInterval(fetchData, 20000);
+  }
+  start();
+</script>
+
+</body>
+
+</html>
